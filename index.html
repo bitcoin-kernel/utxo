@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>utxo · one coin, shown</title>
-<meta name="description" content="Give it a UTXO. It fetches the transaction, checks it with bitcoin-kernel in your browser, and shows the coin. The data lives in a JSON-LD island on the page.">
+<meta name="description" content="Give it a txo: URI. It fetches the transaction, checks it with bitcoin-kernel in your browser, and shows the coin, on Bitcoin or the BLAKE2b chain. The data lives in a JSON-LD island on the page.">
 <meta name="theme-color" content="#fbfaf7">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,8 +15,11 @@
   JSON-LD using the terms of bitcoin-kernel's core schema (btc:TransactionOutput,
   btc:OutPoint, btc:txid, btc:vout, btc:value, btc:scriptPubKey, btc:Transaction ...).
 
+  The @id is a txo: URI, txo:<chain>:<txid>:<vout>, where chain is btc, tbtc, xbt or txbt.
+  The same URI goes in the query string: ?txo=txo:txbt:<txid>:<vout>
+
   "transaction" may be given three ways:
-    1. a link      { "@id": "https://mempool.space/api/tx/<txid>/hex" }
+    1. a link      { "@id": "https://mempool.guide/testnet4/api/tx/<txid>/hex" }
     2. the raw tx  { "@type": "btc:Transaction", "hex": "0100000001..." }
     3. decoded     { "@type": "btc:Transaction", "version": 1, "inputs": [...], "outputs": [...], "lockTime": 0 }
   The page reads whichever is present, runs it through the kernel codec, recomputes the txid,
@@ -29,11 +32,12 @@
 {
   "@context": {
     "btc": "https://bitcoin-kernel.com/ns#",
+    "txo": "txo:",
+    "chain": "btc:chain",
     "txid": "btc:txid",
     "vout": "btc:vout",
     "value": "btc:value",
     "scriptPubKey": "btc:scriptPubKey",
-    "network": "btc:network",
     "hex": "btc:hex",
     "version": "btc:version",
     "inputs": { "@id": "btc:inputs", "@container": "@list" },
@@ -46,11 +50,11 @@
     "transaction": { "@id": "btc:transaction", "@type": "@id" }
   },
   "@type": "btc:TransactionOutput",
-  "@id": "bitcoin:4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b:0",
-  "network": "mainnet",
-  "txid": "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b",
+  "@id": "txo:txbt:dc8593286547fbd648829499a74a1ff6c62add8d5b77b4942b41c5c5cdcd6e18:0",
+  "chain": "txbt",
+  "txid": "dc8593286547fbd648829499a74a1ff6c62add8d5b77b4942b41c5c5cdcd6e18",
   "vout": 0,
-  "transaction": { "@id": "https://mempool.space/api/tx/4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b/hex" }
+  "transaction": { "@id": "https://mempool.guide/testnet4/api/tx/dc8593286547fbd648829499a74a1ff6c62add8d5b77b4942b41c5c5cdcd6e18/hex" }
 }
 </script>
 
@@ -156,6 +160,8 @@
   .btn:hover{border-color:var(--ac);color:var(--ac2)}
   .btn.on{border-color:var(--ac);color:var(--ac2);background:#fff1e0}
   .btn:disabled{opacity:.45;cursor:not-allowed}
+  a.btn{text-decoration:none;display:inline-block}a.btn:hover{text-decoration:none}
+  .sub code{font:.9em var(--mono);background:#fff1e0;color:var(--ac2);padding:.05em .35em;border-radius:5px}
 
   /* sections */
   section{margin:2rem 0 0}
@@ -187,12 +193,12 @@
 
 <header><div class="wrap">
   <h1>One coin, <em>shown</em>.</h1>
-  <p class="sub">Give it an unspent output. It fetches the transaction, checks it with bitcoin-kernel right here in your browser, and shows you the coin.</p>
+  <p class="sub">Give it an output as a <code>txo:</code> URI. It fetches the transaction, checks it with bitcoin-kernel right here in your browser, and shows you the coin. Bitcoin, or the BLAKE2b chain.</p>
   <form class="ref" id="form" autocomplete="off">
-    <input id="ref" placeholder="txid:vout  ·  or an explorer link  ·  or paste JSON-LD" spellcheck="false">
+    <input id="ref" placeholder="txo:txbt:txid:vout  ·  or an explorer link  ·  or paste JSON-LD" spellcheck="false">
     <button type="submit">Show</button>
   </form>
-  <p class="hint">try <a href="#4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b:0">the genesis coin</a> · <a href="#a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d:0">10,000 BTC for two pizzas</a> · <a href="#f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16:0">the first payment</a></p>
+  <p class="hint">try <a href="?txo=txo:txbt:dc8593286547fbd648829499a74a1ff6c62add8d5b77b4942b41c5c5cdcd6e18:0" data-txo="txo:txbt:dc8593286547fbd648829499a74a1ff6c62add8d5b77b4942b41c5c5cdcd6e18:0">a TXBT taproot coin</a> · <a href="?txo=txo:btc:4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b:0" data-txo="txo:btc:4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b:0">the genesis coin</a> · <a href="?txo=txo:btc:a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d:0" data-txo="txo:btc:a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d:0">10,000 BTC for two pizzas</a> · <span>chains: btc, tbtc, xbt, txbt</span></p>
   <ol class="rail" id="rail">
     <li data-s="ref">Reference</li><li data-s="fetch">Fetch</li><li data-s="verify">Verify</li><li data-s="show">Display</li><li data-s="transfer" class="locked">Transfer</li>
   </ol>
@@ -205,7 +211,7 @@
         <div class="ring"></div><div class="ring2"></div>
         <div class="face">
           <div class="amt" id="amt">—</div>
-          <div class="unit">BTC</div>
+          <div class="unit" id="unit">BTC</div>
           <div class="sats" id="sats">&nbsp;</div>
         </div>
       </div>
@@ -213,7 +219,7 @@
     </div>
 
     <div class="card fade" id="ledger">
-      <h2>the output <span class="r"><button class="btn" id="copylink">copy link</button></span></h2>
+      <h2>the output <span class="r"><a class="btn" id="explorer" href="#" target="_blank" rel="noopener">explorer ↗</a><button class="btn" id="copylink">copy link</button></span></h2>
       <div id="rows"><p class="msg">Enter a UTXO above, or let the island load.</p></div>
     </div>
   </div>
@@ -244,9 +250,9 @@
       <a href="https://bitcoin-kernel.com/">bitcoin-kernel</a>
       <a href="https://cdn.jsdelivr.net/gh/bitcoin-kernel/kernel@v0.0.2/packages/kernel/codec/codec.js">the codec that decodes the tx</a>
       <a href="https://bitcoin-kernel.com/engine/schema/core.jsonld">core.jsonld</a>
-      <span id="prov">mempool.space</span>
+      <span id="prov">mempool.guide</span>
     </div>
-    The transaction is fetched from a public explorer, decoded and re-hashed by bitcoin-kernel's codec in this tab. The txid is recomputed from the bytes, not trusted from the URL. Nothing else is fetched.
+    The transaction is fetched from a public explorer for its chain (mempool.guide for TXBT, Kilombino for XBT, mempool.space for BTC), decoded and re-hashed by bitcoin-kernel's codec in this tab. The txid is recomputed from the bytes, not trusted from the URL. Nothing else is fetched.
   </footer>
 </main>
 
@@ -256,13 +262,24 @@ import { sha256, hash160, hexToBytes, bytesToHex } from 'https://cdn.jsdelivr.ne
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
-const EXPLORERS = ['https://mempool.space/api', 'https://blockstream.info/api'];
-const qs = new URLSearchParams(location.search);
-const API = qs.get('api') ? [qs.get('api').replace(/\/$/, '')] : EXPLORERS;
 const HEX64 = /^[0-9a-f]{64}$/i;
 
+// ---------- chains: the middle segment of a txo: URI ----------
+// txo:<chain>:<txid>:<vout>. Txids are SHA256d on every chain here; the BLAKE2b fork
+// only changed the header hash, so the kernel's txid check applies unchanged.
+const CHAINS = {
+  btc:  { name: 'Bitcoin',                  unit: 'BTC',  api: ['https://mempool.space/api', 'https://blockstream.info/api'], explorer: 'https://mempool.space/tx/', hrp: 'bc', p2pkh: 0x00, p2sh: 0x05 },
+  tbtc: { name: 'Bitcoin testnet4',         unit: 'TBTC', api: ['https://mempool.space/testnet4/api'], explorer: 'https://mempool.space/testnet4/tx/', hrp: 'tb', p2pkh: 0x6f, p2sh: 0xc4 },
+  xbt:  { name: 'Bitcoin BLAKE2b',          unit: 'XBT',  api: ['https://mempool.kilombino.com/api'], explorer: 'https://mempool.kilombino.com/tx/', hrp: 'bc', p2pkh: 0x00, p2sh: 0x05 },
+  txbt: { name: 'Bitcoin BLAKE2b testnet4', unit: 'TXBT', api: ['https://mempool.guide/testnet4/api', 'https://mempool.kilombino.com/testnet4/api'], explorer: 'https://mempool.guide/testnet4/tx/', hrp: 'tb', p2pkh: 0x6f, p2sh: 0xc4 },
+};
+const qs = new URLSearchParams(location.search);
+const API_OVERRIDE = qs.get('api') ? [qs.get('api').replace(/\/$/, '')] : null;
+const apisFor = (chain) => API_OVERRIDE || CHAINS[chain].api;
+const txoUri = (chain, txid, vout) => `txo:${chain}:${txid}:${vout}`;
+
 // ---------- state ----------
-const state = { txid: null, vout: null, tx: null, hex: null, out: null, status: null, spend: null, mode: 'link', verified: false };
+const state = { chain: 'btc', txid: null, vout: null, tx: null, hex: null, out: null, status: null, spend: null, mode: 'link', verified: false };
 let codec = null;
 
 // ---------- steps rail ----------
@@ -274,14 +291,29 @@ const rail = (step, cls) => {
   }
 };
 
-// ---------- parse a reference: txid:vout, explorer url, json-ld ----------
+// ---------- parse a reference: txo: URI, chain:txid:vout, txid:vout, explorer url, json-ld ----------
+function chainFromUrl(u) {
+  const h = u.hostname, p = u.pathname;
+  const tn = /\/testnet4?\//.test(p);
+  if (/mempool\.guide$/.test(h)) return tn ? 'txbt' : 'xbt';
+  if (/kilombino\.com$/.test(h)) return tn ? 'txbt' : 'xbt';
+  return tn ? 'tbtc' : 'btc';
+}
 function parseRef(s) {
   s = s.trim();
   if (!s) return null;
   if (s.startsWith('{')) { try { return { island: JSON.parse(s) }; } catch { throw new Error('that JSON did not parse'); } }
-  let m = s.match(/([0-9a-f]{64})[/:\s#?&]+(?:vout=|out=|#)?(\d+)/i) || s.match(/([0-9a-f]{64})/i);
-  if (!m) throw new Error('need a txid (64 hex) and an output index, like <code>txid:0</code>');
-  return { txid: m[1].toLowerCase(), vout: m[2] !== undefined ? Number(m[2]) : 0 };
+  let m = s.match(/^(?:txo:)?([a-z0-9]{2,8}):([0-9a-f]{64})(?::(\d+))?$/i);
+  if (m) {
+    const chain = m[1].toLowerCase();
+    if (!CHAINS[chain]) throw new Error(`unknown chain <code>${esc(chain)}</code>; known: ${Object.keys(CHAINS).join(', ')}`);
+    return { chain, txid: m[2].toLowerCase(), vout: Number(m[3] ?? 0) };
+  }
+  let chain = state.chain;
+  if (/^https?:\/\//i.test(s)) { try { chain = chainFromUrl(new URL(s)); } catch {} }
+  m = s.match(/([0-9a-f]{64})[/:\s#?&]+(?:vout=|out=|#)?(\d+)/i) || s.match(/([0-9a-f]{64})/i);
+  if (!m) throw new Error('need a txid (64 hex) and an output index, like <code>txo:txbt:txid:0</code>');
+  return { chain, txid: m[1].toLowerCase(), vout: m[2] !== undefined ? Number(m[2]) : 0 };
 }
 
 // ---------- island read / write ----------
@@ -289,10 +321,10 @@ const readIsland = () => { try { return JSON.parse($('utxo').textContent); } cat
 const CONTEXT = readIsland()['@context'];
 
 function buildIsland(mode) {
-  const { txid, vout, tx, hex, out } = state;
-  const base = { '@context': CONTEXT, '@type': 'btc:TransactionOutput', '@id': `bitcoin:${txid}:${vout}`, network: 'mainnet', txid, vout };
+  const { chain, txid, vout, tx, hex, out } = state;
+  const base = { '@context': CONTEXT, '@type': 'btc:TransactionOutput', '@id': txoUri(chain, txid, vout), chain, txid, vout };
   if (out) { base.value = out.value; base.scriptPubKey = out.scriptPubKey; }
-  if (mode === 'link' || !tx) base.transaction = { '@id': `${API[0]}/tx/${txid}/hex` };
+  if (mode === 'link' || !tx) base.transaction = { '@id': `${apisFor(chain)[0]}/tx/${txid}/hex` };
   else if (mode === 'hex') base.transaction = { '@type': 'btc:Transaction', txid, hex };
   else base.transaction = { '@type': 'btc:Transaction', txid, version: tx.version, inputs: tx.inputs, outputs: tx.outputs, ...(tx.witness ? { witness: tx.witness } : {}), lockTime: tx.lockTime };
   return base;
@@ -307,9 +339,9 @@ function writeIsland() {
 }
 
 // ---------- fetch with fallback ----------
-async function api(path, text) {
+async function api(chain, path, text) {
   let last;
-  for (const base of API) {
+  for (const base of apisFor(chain)) {
     try {
       const r = await fetch(base + path);
       if (r.status === 404) throw new Error('not found on ' + new URL(base).host);
@@ -360,37 +392,38 @@ function bech32(hrp, ver, prog) {
   const chk = []; for (let i = 0; i < 6; i++) chk.push((pm >> (5 * (5 - i))) & 31);
   return hrp + '1' + [...data, ...chk].map((d) => BCH[d]).join('');
 }
-function classify(spk) {
+function classify(spk, C) {
   const b = hexToBytes(spk); const L = b.length;
-  if (L === 25 && b[0] === 0x76 && b[1] === 0xa9 && b[2] === 20 && b[23] === 0x88 && b[24] === 0xac) return { type: 'p2pkh', label: 'pay to pubkey hash', address: base58check(new Uint8Array([0, ...b.subarray(3, 23)])) };
-  if (L === 23 && b[0] === 0xa9 && b[1] === 20 && b[22] === 0x87) return { type: 'p2sh', label: 'pay to script hash', address: base58check(new Uint8Array([5, ...b.subarray(2, 22)])) };
-  if (L === 22 && b[0] === 0 && b[1] === 20) return { type: 'p2wpkh', label: 'native segwit v0', address: bech32('bc', 0, b.subarray(2)) };
-  if (L === 34 && b[0] === 0 && b[1] === 32) return { type: 'p2wsh', label: 'native segwit v0 script', address: bech32('bc', 0, b.subarray(2)) };
-  if (L === 34 && b[0] === 0x51 && b[1] === 32) return { type: 'p2tr', label: 'taproot', address: bech32('bc', 1, b.subarray(2)) };
-  if ((L === 35 || L === 67) && b[L - 1] === 0xac && b[0] === L - 2) return { type: 'p2pk', label: 'pay to pubkey', pubkey: bytesToHex(b.subarray(1, L - 1)), address: base58check(new Uint8Array([0, ...hash160(b.subarray(1, L - 1))])), derived: true };
+  if (L === 25 && b[0] === 0x76 && b[1] === 0xa9 && b[2] === 20 && b[23] === 0x88 && b[24] === 0xac) return { type: 'p2pkh', label: 'pay to pubkey hash', address: base58check(new Uint8Array([C.p2pkh, ...b.subarray(3, 23)])) };
+  if (L === 23 && b[0] === 0xa9 && b[1] === 20 && b[22] === 0x87) return { type: 'p2sh', label: 'pay to script hash', address: base58check(new Uint8Array([C.p2sh, ...b.subarray(2, 22)])) };
+  if (L === 22 && b[0] === 0 && b[1] === 20) return { type: 'p2wpkh', label: 'native segwit v0', address: bech32(C.hrp, 0, b.subarray(2)) };
+  if (L === 34 && b[0] === 0 && b[1] === 32) return { type: 'p2wsh', label: 'native segwit v0 script', address: bech32(C.hrp, 0, b.subarray(2)) };
+  if (L === 34 && b[0] === 0x51 && b[1] === 32) return { type: 'p2tr', label: 'taproot', address: bech32(C.hrp, 1, b.subarray(2)) };
+  if ((L === 35 || L === 67) && b[L - 1] === 0xac && b[0] === L - 2) return { type: 'p2pk', label: 'pay to pubkey', pubkey: bytesToHex(b.subarray(1, L - 1)), address: base58check(new Uint8Array([C.p2pkh, ...hash160(b.subarray(1, L - 1))])), derived: true };
   if (b[0] === 0x6a) return { type: 'op_return', label: 'data carrier, unspendable' };
   if (L >= 4 && b[0] >= 0x51 && b[0] <= 0x60 && b[L - 1] === 0xae) return { type: 'bare multisig', label: 'bare multisig' };
   return { type: 'nonstandard', label: 'non-standard script' };
 }
 
 // ---------- render ----------
-const fmtBtc = (sats) => { const s = BigInt(sats); const i = s / 100000000n, f = (s % 100000000n).toString().padStart(8, '0'); const t = f.replace(/0+$/, ''); return { i: i.toString(), f, keep: t.length }; };
+const fmtCoin = (sats) => { const s = BigInt(sats); const i = s / 100000000n, f = (s % 100000000n).toString().padStart(8, '0'); const t = f.replace(/0+$/, ''); return { i: i.toString(), f, keep: t.length }; };
 function renderCoin() {
-  const { out } = state; const coin = $('coin');
+  const { out, chain } = state; const coin = $('coin');
+  $('unit').textContent = CHAINS[chain].unit;
   if (!out) { coin.classList.add('empty'); $('amt').textContent = '—'; $('sats').innerHTML = '&nbsp;'; return; }
   coin.classList.remove('empty');
-  const { i, f, keep } = fmtBtc(out.value);
+  const { i, f, keep } = fmtCoin(out.value);
   $('amt').innerHTML = `${i}<span class="frac">.<b>${f.slice(0, keep)}</b>${f.slice(keep)}</span>`;
   $('sats').textContent = Number(out.value).toLocaleString() + ' sats';
 }
 function pill(cls, text) { $('pill').className = 'pill ' + cls; $('pill').lastElementChild.textContent = text; }
 function renderRows() {
-  const { txid, vout, tx, out, status, spend, verified } = state;
-  const cls = classify(out.scriptPubKey);
+  const { chain, txid, vout, tx, out, status, spend, verified } = state; const C = CHAINS[chain];
+  const cls = classify(out.scriptPubKey, C);
   const addr = cls.address ? `${cls.address}${cls.derived ? ' <small>(hash of the pubkey; the coin is locked to the key itself)</small>' : ''}` : cls.pubkey ? `<small>no address:</small> pubkey ${cls.pubkey}` : '<small>none</small>';
   const rows = [
-    ['outpoint', `${txid}<small>:${vout}</small>`],
-    ['value', `${Number(out.value).toLocaleString()} sats <small>= ${(() => { const { i, f } = fmtBtc(out.value); return i + '.' + f; })()} BTC</small>`],
+    ['txo', `<span class="tag">${chain}</span>${C.name} <small>· txo:${chain}:</small>${txid}<small>:${vout}</small>`],
+    ['value', `${Number(out.value).toLocaleString()} sats <small>= ${(() => { const { i, f } = fmtCoin(out.value); return i + '.' + f; })()} ${C.unit}</small>`],
     ['locked by', `<span class="tag">${cls.type}</span>${cls.label}`],
     ['address', addr],
     ['scriptPubKey', `<div class="asm">${asm(out.scriptPubKey).map((t) => t.startsWith('OP_') ? `<b>${t}</b>` : t).join(' ')}</div><div class="hex">${out.scriptPubKey}</div>`],
@@ -408,14 +441,23 @@ let run = 0;
 async function show(ref) {
   const my = ++run;
   const island = ref.island || null;
-  if (island) { ref.txid = island.txid?.toLowerCase(); ref.vout = Number(island.vout ?? 0); }
+  if (island) {
+    const m = String(island['@id'] || '').match(/^txo:([a-z0-9]+):([0-9a-f]{64}):(\d+)$/i);
+    ref.chain = (island.chain || (m && m[1]) || 'btc').toLowerCase();
+    ref.txid = (island.txid || (m && m[2]) || '').toLowerCase();
+    ref.vout = Number(island.vout ?? (m && m[3]) ?? 0);
+  }
+  if (!CHAINS[ref.chain]) return fail(`unknown chain <code>${esc(ref.chain)}</code>`);
   if (!HEX64.test(ref.txid || '')) return fail('the reference needs a 64-hex txid');
-  Object.assign(state, { txid: ref.txid, vout: ref.vout, tx: null, hex: null, out: null, status: null, spend: null, verified: false });
-  $('ref').value = `${ref.txid}:${ref.vout}`;
-  if (!island) history.replaceState(null, '', `#${ref.txid}:${ref.vout}`);
-  document.title = `utxo · ${ref.txid.slice(0, 8)}…:${ref.vout}`;
+  const C = CHAINS[ref.chain];
+  const uri = txoUri(ref.chain, ref.txid, ref.vout);
+  Object.assign(state, { chain: ref.chain, txid: ref.txid, vout: ref.vout, tx: null, hex: null, out: null, status: null, spend: null, verified: false });
+  $('ref').value = uri;
+  if (!island) history.replaceState(null, '', '?txo=' + uri + (qs.get('api') ? '&api=' + encodeURIComponent(qs.get('api')) : ''));
+  document.title = `utxo · ${ref.chain} · ${ref.txid.slice(0, 8)}…:${ref.vout}`;
+  $('explorer').href = C.explorer + ref.txid;
   renderCoin(); pill('pending', 'fetching'); rail('ref', 'done'); rail('fetch');
-  $('ledger').classList.add('in'); $('rows').innerHTML = '<p class="msg">fetching the transaction…</p>';
+  $('ledger').classList.add('in'); $('rows').innerHTML = `<p class="msg">fetching the transaction from ${C.name}…</p>`;
   try {
     if (!codec) {
       const core = await (await fetch('https://bitcoin-kernel.com/engine/schema/core.jsonld')).json();
@@ -426,7 +468,7 @@ async function show(ref) {
     let tx, hex;
     if (t?.hex) { hex = t.hex; tx = codec.decode('Transaction', hex); }
     else if (t?.outputs) { tx = t; hex = codec.encodeHex('Transaction', tx); }
-    else { hex = (await api(`/tx/${ref.txid}/hex`, true)).trim(); tx = codec.decode('Transaction', hex); }
+    else { hex = (await api(ref.chain, `/tx/${ref.txid}/hex`, true)).trim(); tx = codec.decode('Transaction', hex); }
     if (my !== run) return;
     rail('verify');
     // 2. verify: the kernel recomputes the txid from the bytes
@@ -434,14 +476,15 @@ async function show(ref) {
     const verified = txid === ref.txid;
     const out = tx.outputs[ref.vout];
     Object.assign(state, { tx, hex, verified, out: out || null });
-    if (!verified) { renderRows(); rail('verify', 'bad'); return fail(`the bytes hash to <code>${txid}</code>, not the txid you asked for. Refusing to show it.`); }
+    if (!verified) { rail('verify', 'bad'); return fail(`the bytes hash to <code>${txid}</code>, not the txid you asked for. Refusing to show it.`); }
     if (!out) { rail('verify', 'bad'); return fail(`this transaction has ${tx.outputs.length} output${tx.outputs.length === 1 ? '' : 's'}; there is no output ${ref.vout}`); }
     // 3. show
     rail('show', 'done'); renderCoin(); renderRows(); writeIsland(); $('island').classList.add('in'); $('transfer').classList.add('in');
     pill('pending', 'checking spend');
     // 4. spent or not (best effort, separate so the coin shows even if this fails)
-    const [status, spend] = await Promise.all([api(`/tx/${ref.txid}/status`).catch(() => null), api(`/tx/${ref.txid}/outspend/${ref.vout}`).catch(() => null)]);
+    const [status, spends] = await Promise.all([api(ref.chain, `/tx/${ref.txid}/status`).catch(() => null), api(ref.chain, `/tx/${ref.txid}/outspends`).catch(() => null)]);
     if (my !== run) return;
+    const spend = Array.isArray(spends) ? spends[ref.vout] || null : null;
     Object.assign(state, { status, spend });
     renderRows();
     if (spend) pill(spend.spent ? 'spent' : 'unspent', spend.spent ? 'spent' : 'unspent'); else pill('', 'spend status unknown');
@@ -456,13 +499,21 @@ $('form').addEventListener('submit', (e) => { e.preventDefault(); try { const r 
 for (const b of document.querySelectorAll('[data-mode]')) b.addEventListener('click', () => { state.mode = b.dataset.mode; writeIsland(); });
 $('copyld').addEventListener('click', async () => { await navigator.clipboard.writeText($('utxo').textContent.trim()); $('copyld').textContent = 'copied'; setTimeout(() => ($('copyld').textContent = 'copy'), 1200); });
 $('copylink').addEventListener('click', async () => { await navigator.clipboard.writeText(location.href); $('copylink').textContent = 'copied'; setTimeout(() => ($('copylink').textContent = 'copy link'), 1200); });
-const fromUrl = () => { const h = location.hash.slice(1) || qs.get('utxo') || qs.get('u'); if (!h) return null; try { return parseRef(decodeURIComponent(h)); } catch { return null; } };
+document.querySelectorAll('.hint a[data-txo]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); show(parseRef(a.dataset.txo)); }));
+
+// the URL forms, in order: ?txo=txo:chain:txid:vout · ?txo:chain:txid:vout (the bare query is the URI) · #chain:txid:vout · #txid:vout
+const fromUrl = () => {
+  const raw = location.search.slice(1);
+  const cand = qs.get('txo') || (/^txo:/i.test(raw) ? raw : null) || qs.get('utxo') || qs.get('u') || location.hash.slice(1);
+  if (!cand) return null;
+  try { return parseRef(decodeURIComponent(cand)); } catch { return null; }
+};
 window.addEventListener('hashchange', () => { const r = fromUrl(); if (r) show(r); });
 
 // start: the URL wins, otherwise the island on the page is the source of truth
 const first = fromUrl();
 if (first) show(first);
-else { const isl = readIsland(); if (isl?.txid) show({ island: isl }); }
+else { const isl = readIsland(); if (isl?.txid || isl?.['@id']) show({ island: isl }); }
 </script>
 </body>
 </html>
