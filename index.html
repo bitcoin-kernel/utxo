@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>utxo · one coin, shown</title>
+<meta name="description" content="Give it a UTXO. It fetches the transaction, checks it with bitcoin-kernel in your browser, and shows the coin. The data lives in a JSON-LD island on the page.">
+<meta name="theme-color" content="#0a0b0e">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!--
+  The data island. This is the whole point of the page: the UTXO is described here as
+  JSON-LD using the terms of bitcoin-kernel's core schema (btc:TransactionOutput,
+  btc:OutPoint, btc:txid, btc:vout, btc:value, btc:scriptPubKey, btc:Transaction ...).
+
+  "transaction" may be given three ways:
+    1. a link      { "@id": "https://mempool.space/api/tx/<txid>/hex" }
+    2. the raw tx  { "@type": "btc:Transaction", "hex": "0100000001..." }
+    3. decoded     { "@type": "btc:Transaction", "version": 1, "inputs": [...], "outputs": [...], "lockTime": 0 }
+  The page reads whichever is present, runs it through the kernel codec, recomputes the txid,
+  and only then shows the coin. The island is rewritten with the verified data afterwards.
+
+  The btc: IRI below is a placeholder: bitcoin-kernel's schemas reference a context.jsonld
+  that is not yet published. Swap it when they publish one.
+-->
+<script type="application/ld+json" id="utxo">
+{
+  "@context": {
+    "btc": "https://bitcoin-kernel.com/ns#",
+    "txid": "btc:txid",
+    "vout": "btc:vout",
+    "value": "btc:value",
+    "scriptPubKey": "btc:scriptPubKey",
+    "network": "btc:network",
+    "hex": "btc:hex",
+    "version": "btc:version",
+    "inputs": { "@id": "btc:inputs", "@container": "@list" },
+    "outputs": { "@id": "btc:outputs", "@container": "@list" },
+    "witness": { "@id": "btc:witness", "@container": "@list" },
+    "lockTime": "btc:lockTime",
+    "prevout": "btc:prevout",
+    "scriptSig": "btc:scriptSig",
+    "sequence": "btc:sequence",
+    "transaction": { "@id": "btc:transaction", "@type": "@id" }
+  },
+  "@type": "btc:TransactionOutput",
+  "@id": "bitcoin:4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b:0",
+  "network": "mainnet",
+  "txid": "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b",
+  "vout": 0,
+  "transaction": { "@id": "https://mempool.space/api/tx/4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b/hex" }
+}
+</script>
+
+<style>
+  :root{
+    --bg:#0a0b0e; --bg2:#0f1116; --pan:rgba(255,255,255,.035); --bd:rgba(255,255,255,.08); --bd2:rgba(255,255,255,.16);
+    --fg:#eef0f4; --mut:#8b93a1; --dim:#5a6270;
+    --ac:#f7931a; --ac2:#ffc266; --gold:#ffd66b;
+    --good:#3ddc84; --bad:#ff5c5c; --info:#6ab0ff;
+    --sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{color-scheme:dark;scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 var(--sans);-webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden}
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:
+      radial-gradient(900px 500px at 50% -10%, rgba(247,147,26,.14), transparent 60%),
+      radial-gradient(700px 400px at 100% 100%, rgba(106,176,255,.06), transparent 60%);}
+  body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.35;mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");}
+  a{color:var(--ac2);text-decoration:none}a:hover{text-decoration:underline}
+  .wrap{position:relative;z-index:1;max-width:880px;margin:0 auto;padding:0 20px}
+
+  /* nav */
+  nav .wrap{display:flex;align-items:center;gap:1.2rem;height:60px}
+  .brand{font-weight:800;letter-spacing:-.4px;color:var(--fg);margin-right:auto;display:flex;align-items:center;gap:.55rem}
+  .brand i{width:10px;height:10px;border-radius:50%;background:conic-gradient(from 200deg,var(--ac),var(--gold),var(--ac));box-shadow:0 0 14px rgba(247,147,26,.7)}
+  nav a.l{color:var(--mut);font-size:.88rem;font-weight:500}nav a.l:hover{color:var(--fg);text-decoration:none}
+
+  /* hero + input */
+  header{padding:2.6rem 0 1rem;text-align:center}
+  h1{font-size:clamp(1.9rem,5vw,2.9rem);line-height:1.05;letter-spacing:-1.4px;margin:0;font-weight:800}
+  h1 em{font-style:normal;background:linear-gradient(90deg,var(--ac),var(--gold));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--mut);margin:.8rem auto 0;max-width:34rem;font-size:1.02rem}
+  form.ref{margin:1.6rem auto 0;max-width:720px;display:flex;gap:.5rem;background:var(--bg2);border:1px solid var(--bd2);border-radius:14px;padding:.4rem .4rem .4rem 1rem;box-shadow:0 20px 60px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.04);transition:border-color .15s,box-shadow .15s}
+  form.ref:focus-within{border-color:rgba(247,147,26,.6);box-shadow:0 20px 60px rgba(0,0,0,.45),0 0 0 4px rgba(247,147,26,.12)}
+  form.ref input{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--fg);font:.92rem var(--mono);padding:.5rem 0}
+  form.ref input::placeholder{color:var(--dim)}
+  form.ref button{border:0;border-radius:10px;padding:.6rem 1.1rem;font:600 .9rem var(--sans);color:#160c00;background:linear-gradient(180deg,var(--ac2),var(--ac));cursor:pointer;white-space:nowrap;box-shadow:0 6px 18px rgba(247,147,26,.3)}
+  form.ref button:hover{filter:brightness(1.06)}
+  .hint{margin:.6rem 0 0;font:.78rem var(--mono);color:var(--dim)}
+  .hint a{color:var(--mut)}
+
+  /* steps rail */
+  .rail{display:flex;gap:.35rem;margin:1.8rem auto 0;max-width:720px;list-style:none;padding:0}
+  .rail li{flex:1;text-align:center;font:600 .68rem var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dim);padding-top:.55rem;border-top:2px solid var(--bd);transition:color .3s,border-color .3s;position:relative}
+  .rail li.on{color:var(--ac2);border-top-color:var(--ac)}
+  .rail li.done{color:var(--mut);border-top-color:rgba(61,220,132,.7)}
+  .rail li.bad{color:var(--bad);border-top-color:var(--bad)}
+  .rail li.locked{opacity:.55}
+  .rail li.on::before{content:"";position:absolute;top:-2px;left:0;height:2px;width:35%;background:#fff;opacity:.8;animation:sweep 1.1s ease-in-out infinite}
+  @keyframes sweep{from{left:0}to{left:65%}}
+
+  /* stage */
+  .stage{margin:2.4rem 0 0;display:grid;grid-template-columns:300px 1fr;gap:2rem;align-items:start}
+  @media(max-width:760px){.stage{grid-template-columns:1fr}}
+  .coinwrap{display:flex;flex-direction:column;align-items:center;gap:1.1rem;position:sticky;top:1.5rem}
+  .coin{position:relative;width:280px;height:280px;max-width:100%;aspect-ratio:1;border-radius:50%;display:grid;place-items:center;
+    filter:drop-shadow(0 30px 50px rgba(0,0,0,.6)) drop-shadow(0 0 40px rgba(247,147,26,.18))}
+  .coin .ring{position:absolute;inset:0;border-radius:50%;background:conic-gradient(from 0deg,var(--ac) 0%,var(--gold) 22%,#7a4a10 48%,var(--ac2) 70%,var(--ac) 100%);
+    -webkit-mask:radial-gradient(circle,transparent 62%,#000 63%);mask:radial-gradient(circle,transparent 62%,#000 63%);animation:spin 14s linear infinite}
+  .coin .ring2{position:absolute;inset:7px;border-radius:50%;border:1px solid rgba(255,214,107,.35)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .coin .face{position:absolute;inset:14px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#1c1a17,#0d0d10 60%,#08080a);
+    box-shadow:inset 0 2px 0 rgba(255,255,255,.06),inset 0 -20px 40px rgba(0,0,0,.6),inset 0 0 0 1px rgba(255,214,107,.12);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.15rem;text-align:center;padding:1rem}
+  .coin .face::after{content:"";position:absolute;inset:0;border-radius:50%;background:linear-gradient(160deg,rgba(255,255,255,.08),transparent 45%);pointer-events:none}
+  .coin .amt{font:700 2.2rem/1 var(--mono);letter-spacing:-1px;color:var(--fg);word-break:break-all}
+  .coin .amt .frac{font-size:1.05rem;color:var(--mut);letter-spacing:0}
+  .coin .amt .frac b{font-weight:500;color:var(--fg)}
+  .coin .unit{font:600 .7rem var(--mono);letter-spacing:.3em;color:var(--ac2);margin-top:.35rem}
+  .coin .sats{font:.72rem var(--mono);color:var(--dim);margin-top:.15rem}
+  .coin.empty .amt{color:var(--dim)}
+  .coin.empty .ring{animation-duration:40s;opacity:.35}
+  .pill{display:inline-flex;align-items:center;gap:.45rem;padding:.35rem .8rem;border-radius:99px;border:1px solid var(--bd2);font:600 .7rem var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--mut);background:var(--pan)}
+  .pill i{width:7px;height:7px;border-radius:50%;background:var(--dim)}
+  .pill.unspent{color:var(--good);border-color:rgba(61,220,132,.4)}.pill.unspent i{background:var(--good);box-shadow:0 0 10px var(--good)}
+  .pill.spent{color:var(--bad);border-color:rgba(255,92,92,.4)}.pill.spent i{background:var(--bad);box-shadow:0 0 10px var(--bad)}
+  .pill.pending i{animation:pulse 1s ease-in-out infinite}
+  @keyframes pulse{50%{opacity:.3}}
+
+  /* ledger */
+  .card{background:var(--pan);border:1px solid var(--bd);border-radius:16px;overflow:hidden;backdrop-filter:blur(6px)}
+  .card h2{margin:0;padding:.85rem 1.1rem;font:600 .72rem var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--mut);border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:.6rem}
+  .card h2 .r{margin-left:auto;display:flex;gap:.4rem}
+  .row{display:grid;grid-template-columns:8.5rem 1fr;border-top:1px solid var(--bd)}
+  .row:first-of-type{border-top:none}
+  .k{padding:.7rem 1.1rem;font:.74rem var(--mono);color:var(--dim);letter-spacing:.02em}
+  .v{padding:.7rem 1.1rem .7rem 0;font:.86rem/1.55 var(--mono);word-break:break-all;color:var(--fg)}
+  .v small{color:var(--mut)}
+  .v .tag{display:inline-block;padding:.1em .5em;border-radius:6px;font-size:.72rem;font-weight:600;background:rgba(247,147,26,.14);color:var(--ac2);margin-right:.4rem;vertical-align:1px}
+  .v .ok{color:var(--good)}.v .no{color:var(--bad)}
+  .v .asm{color:#cdd3dc}.v .asm b{color:var(--ac2);font-weight:500}
+  .v .hex{color:var(--dim);font-size:.74rem;margin-top:.2rem}
+  @media(max-width:520px){.row{grid-template-columns:1fr}.v{padding-left:1.1rem;padding-top:0}}
+  .msg{padding:1.2rem 1.1rem;color:var(--mut);font-size:.92rem}
+  .msg.err{color:var(--bad)}
+  .msg code{font:.8rem var(--mono);background:rgba(255,255,255,.06);padding:.1em .4em;border-radius:5px}
+
+  /* buttons */
+  .btn{border:1px solid var(--bd2);background:rgba(255,255,255,.03);color:var(--fg);border-radius:8px;padding:.3rem .65rem;font:500 .74rem var(--mono);cursor:pointer;letter-spacing:.02em}
+  .btn:hover{border-color:var(--ac);color:var(--ac2)}
+  .btn.on{border-color:var(--ac);color:var(--ac2);background:rgba(247,147,26,.1)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+
+  /* sections */
+  section{margin:2rem 0 0}
+  pre{margin:0;padding:1rem 1.1rem;font:.78rem/1.55 var(--mono);color:#cdd3dc;overflow:auto;max-height:26rem;background:rgba(0,0,0,.25);white-space:pre-wrap;word-break:break-all}
+  pre .s{color:#9ad3a8}pre .n{color:var(--ac2)}pre .k{padding:0;color:#8fb7ff;font-size:inherit;letter-spacing:0}
+  .transfer{position:relative}
+  .transfer .body{padding:1.1rem;display:grid;gap:.8rem}
+  .transfer p{margin:0;color:var(--mut);font-size:.92rem}
+  .transfer .fake{display:flex;gap:.5rem}
+  .transfer .fake input{flex:1;background:rgba(0,0,0,.25);border:1px solid var(--bd);border-radius:10px;padding:.6rem .8rem;font:.86rem var(--mono);color:var(--fg)}
+  .transfer .fake button{border:1px solid var(--bd2);background:none;color:var(--mut);border-radius:10px;padding:.6rem 1rem;font:600 .86rem var(--sans);cursor:not-allowed}
+  .lock{position:absolute;top:.7rem;right:1rem;font:600 .66rem var(--mono);letter-spacing:.14em;color:var(--dim);border:1px solid var(--bd);border-radius:99px;padding:.2rem .6rem}
+
+  footer{margin:3rem 0 2rem;color:var(--dim);font:.78rem/1.7 var(--mono)}
+  footer .links{display:flex;gap:1.2rem;flex-wrap:wrap;margin-bottom:.5rem}
+  footer a{color:var(--mut)}
+  .fade{opacity:0;transform:translateY(8px);transition:opacity .45s,transform .45s}
+  .fade.in{opacity:1;transform:none}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="./"><i></i>utxo</a>
+  <a class="l" href="#island">JSON-LD</a>
+  <a class="l" href="https://bitcoin-kernel.com/spec.html">Spec</a>
+  <a class="l" href="https://bitcoin-kernel.com/">bitcoin-kernel</a>
+</div></nav>
+
+<header><div class="wrap">
+  <h1>One coin, <em>shown</em>.</h1>
+  <p class="sub">Give it an unspent output. It fetches the transaction, checks it with bitcoin-kernel right here in your browser, and shows you the coin.</p>
+  <form class="ref" id="form" autocomplete="off">
+    <input id="ref" placeholder="txid:vout  ·  or an explorer link  ·  or paste JSON-LD" spellcheck="false">
+    <button type="submit">Show</button>
+  </form>
+  <p class="hint">try <a href="#4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b:0">the genesis coin</a> · <a href="#a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d:0">10,000 BTC for two pizzas</a> · <a href="#f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16:0">the first payment</a></p>
+  <ol class="rail" id="rail">
+    <li data-s="ref">Reference</li><li data-s="fetch">Fetch</li><li data-s="verify">Verify</li><li data-s="show">Display</li><li data-s="transfer" class="locked">Transfer</li>
+  </ol>
+</div></header>
+
+<main class="wrap">
+  <div class="stage">
+    <div class="coinwrap">
+      <div class="coin empty" id="coin">
+        <div class="ring"></div><div class="ring2"></div>
+        <div class="face">
+          <div class="amt" id="amt">—</div>
+          <div class="unit">BTC</div>
+          <div class="sats" id="sats">&nbsp;</div>
+        </div>
+      </div>
+      <span class="pill" id="pill"><i></i><span>waiting</span></span>
+    </div>
+
+    <div class="card fade" id="ledger">
+      <h2>the output <span class="r"><button class="btn" id="copylink">copy link</button></span></h2>
+      <div id="rows"><p class="msg">Enter a UTXO above, or let the island load.</p></div>
+    </div>
+  </div>
+
+  <section id="island" class="fade">
+    <div class="card">
+      <h2>the data island <span class="r">
+        <button class="btn on" data-mode="link">link</button><button class="btn" data-mode="hex">whole tx</button><button class="btn" data-mode="json">decoded</button><button class="btn" id="copyld">copy</button>
+      </span></h2>
+      <pre id="ld"></pre>
+      <p class="msg">This is what the page carries in its <code>&lt;script type="application/ld+json"&gt;</code>. Anyone, or anything, can read the coin without running the page. Switch the form above; the island in the DOM is rewritten to match.</p>
+    </div>
+  </section>
+
+  <section class="fade" id="transfer">
+    <div class="card transfer">
+      <span class="lock">next</span>
+      <h2>transfer</h2>
+      <div class="body">
+        <p>The next step is to spend this coin: build a transaction with this output as its only input, sign it in the browser, and broadcast. The kernel already knows how to serialize it; what is missing is a key.</p>
+        <div class="fake"><input placeholder="destination address" disabled><button disabled>Sign &amp; send</button></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="links">
+      <a href="https://bitcoin-kernel.com/">bitcoin-kernel</a>
+      <a href="https://cdn.jsdelivr.net/gh/bitcoin-kernel/kernel@v0.0.2/packages/kernel/codec/codec.js">the codec that decodes the tx</a>
+      <a href="https://bitcoin-kernel.com/engine/schema/core.jsonld">core.jsonld</a>
+      <span id="prov">mempool.space</span>
+    </div>
+    The transaction is fetched from a public explorer, decoded and re-hashed by bitcoin-kernel's codec in this tab. The txid is recomputed from the bytes, not trusted from the URL. Nothing else is fetched.
+  </footer>
+</main>
+
+<script type="module">
+import { Codec } from 'https://cdn.jsdelivr.net/gh/bitcoin-kernel/kernel@v0.0.2/packages/kernel/codec/codec.js';
+import { sha256, hash160, hexToBytes, bytesToHex } from 'https://cdn.jsdelivr.net/gh/bitcoin-kernel/kernel@v0.0.2/packages/kernel/codec/hash.js';
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const EXPLORERS = ['https://mempool.space/api', 'https://blockstream.info/api'];
+const qs = new URLSearchParams(location.search);
+const API = qs.get('api') ? [qs.get('api').replace(/\/$/, '')] : EXPLORERS;
+const HEX64 = /^[0-9a-f]{64}$/i;
+
+// ---------- state ----------
+const state = { txid: null, vout: null, tx: null, hex: null, out: null, status: null, spend: null, mode: 'link', verified: false };
+let codec = null;
+
+// ---------- steps rail ----------
+const rail = (step, cls) => {
+  const order = ['ref', 'fetch', 'verify', 'show', 'transfer'];
+  for (const li of $('rail').children) {
+    const i = order.indexOf(li.dataset.s), j = order.indexOf(step);
+    li.className = li.dataset.s === 'transfer' ? 'locked' : i < j ? 'done' : i === j ? (cls || 'on') : '';
+  }
+};
+
+// ---------- parse a reference: txid:vout, explorer url, json-ld ----------
+function parseRef(s) {
+  s = s.trim();
+  if (!s) return null;
+  if (s.startsWith('{')) { try { return { island: JSON.parse(s) }; } catch { throw new Error('that JSON did not parse'); } }
+  let m = s.match(/([0-9a-f]{64})[/:\s#?&]+(?:vout=|out=|#)?(\d+)/i) || s.match(/([0-9a-f]{64})/i);
+  if (!m) throw new Error('need a txid (64 hex) and an output index, like <code>txid:0</code>');
+  return { txid: m[1].toLowerCase(), vout: m[2] !== undefined ? Number(m[2]) : 0 };
+}
+
+// ---------- island read / write ----------
+const readIsland = () => { try { return JSON.parse($('utxo').textContent); } catch { return null; } };
+const CONTEXT = readIsland()['@context'];
+
+function buildIsland(mode) {
+  const { txid, vout, tx, hex, out } = state;
+  const base = { '@context': CONTEXT, '@type': 'btc:TransactionOutput', '@id': `bitcoin:${txid}:${vout}`, network: 'mainnet', txid, vout };
+  if (out) { base.value = out.value; base.scriptPubKey = out.scriptPubKey; }
+  if (mode === 'link' || !tx) base.transaction = { '@id': `${API[0]}/tx/${txid}/hex` };
+  else if (mode === 'hex') base.transaction = { '@type': 'btc:Transaction', txid, hex };
+  else base.transaction = { '@type': 'btc:Transaction', txid, version: tx.version, inputs: tx.inputs, outputs: tx.outputs, ...(tx.witness ? { witness: tx.witness } : {}), lockTime: tx.lockTime };
+  return base;
+}
+function writeIsland() {
+  const obj = buildIsland(state.mode);
+  const text = JSON.stringify(obj, null, 2);
+  $('utxo').textContent = '\n' + text + '\n';
+  $('ld').innerHTML = text.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|\b(-?\d+)\b/g, (m, str, colon, num) =>
+    num !== undefined ? `<span class="n">${num}</span>` : colon ? `<span class="k">${esc(str)}</span>${colon}` : `<span class="s">${esc(str)}</span>`);
+  for (const b of document.querySelectorAll('[data-mode]')) b.classList.toggle('on', b.dataset.mode === state.mode);
+}
+
+// ---------- fetch with fallback ----------
+async function api(path, text) {
+  let last;
+  for (const base of API) {
+    try {
+      const r = await fetch(base + path);
+      if (r.status === 404) throw new Error('not found on ' + new URL(base).host);
+      if (!r.ok) throw new Error(r.status + ' from ' + new URL(base).host);
+      $('prov').textContent = new URL(base).host;
+      return text ? r.text() : r.json();
+    } catch (e) { last = e; }
+  }
+  throw last;
+}
+
+// ---------- script decoding ----------
+const OPS = { 0: 'OP_0', 0x4c: 'OP_PUSHDATA1', 0x4d: 'OP_PUSHDATA2', 0x4e: 'OP_PUSHDATA4', 0x4f: 'OP_1NEGATE', 0x61: 'OP_NOP', 0x63: 'OP_IF', 0x64: 'OP_NOTIF', 0x67: 'OP_ELSE', 0x68: 'OP_ENDIF', 0x69: 'OP_VERIFY', 0x6a: 'OP_RETURN', 0x6b: 'OP_TOALTSTACK', 0x6c: 'OP_FROMALTSTACK', 0x73: 'OP_IFDUP', 0x74: 'OP_DEPTH', 0x75: 'OP_DROP', 0x76: 'OP_DUP', 0x77: 'OP_NIP', 0x78: 'OP_OVER', 0x79: 'OP_PICK', 0x7a: 'OP_ROLL', 0x7b: 'OP_ROT', 0x7c: 'OP_SWAP', 0x7d: 'OP_TUCK', 0x82: 'OP_SIZE', 0x87: 'OP_EQUAL', 0x88: 'OP_EQUALVERIFY', 0x8b: 'OP_1ADD', 0x8c: 'OP_1SUB', 0x93: 'OP_ADD', 0x94: 'OP_SUB', 0x9a: 'OP_BOOLAND', 0x9b: 'OP_BOOLOR', 0x9c: 'OP_NUMEQUAL', 0x9d: 'OP_NUMEQUALVERIFY', 0xa0: 'OP_GREATERTHAN', 0xa2: 'OP_LESSTHANOREQUAL', 0xa6: 'OP_RIPEMD160', 0xa7: 'OP_SHA1', 0xa8: 'OP_SHA256', 0xa9: 'OP_HASH160', 0xaa: 'OP_HASH256', 0xab: 'OP_CODESEPARATOR', 0xac: 'OP_CHECKSIG', 0xad: 'OP_CHECKSIGVERIFY', 0xae: 'OP_CHECKMULTISIG', 0xaf: 'OP_CHECKMULTISIGVERIFY', 0xb1: 'OP_CHECKLOCKTIMEVERIFY', 0xb2: 'OP_CHECKSEQUENCEVERIFY', 0xba: 'OP_CHECKSIGADD' };
+function asm(hex) {
+  const b = hexToBytes(hex); const out = []; let i = 0;
+  while (i < b.length) {
+    const op = b[i++];
+    if (op >= 1 && op <= 0x4e) {
+      let n = op;
+      if (op === 0x4c) { n = b[i]; i += 1; } else if (op === 0x4d) { n = b[i] | (b[i + 1] << 8); i += 2; } else if (op === 0x4e) { n = b[i] | (b[i + 1] << 8) | (b[i + 2] << 16) | (b[i + 3] << 24); i += 4; }
+      out.push(bytesToHex(b.subarray(i, i + n))); i += n;
+    } else if (op >= 0x51 && op <= 0x60) out.push('OP_' + (op - 0x50));
+    else out.push(OPS[op] || 'OP_UNKNOWN(0x' + op.toString(16).padStart(2, '0') + ')');
+  }
+  return out;
+}
+
+// base58check + bech32(m), just enough for addresses
+const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+function base58check(payload) {
+  const chk = sha256(sha256(payload)).subarray(0, 4);
+  const full = new Uint8Array(payload.length + 4); full.set(payload); full.set(chk, payload.length);
+  let n = 0n; for (const x of full) n = n * 256n + BigInt(x);
+  let s = ''; while (n > 0n) { s = B58[Number(n % 58n)] + s; n /= 58n; }
+  for (const x of full) { if (x !== 0) break; s = '1' + s; }
+  return s;
+}
+const BCH = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+function polymod(v) { const G = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3]; let c = 1; for (const x of v) { const b = c >>> 25; c = ((c & 0x1ffffff) << 5) ^ x; for (let i = 0; i < 5; i++) if ((b >> i) & 1) c ^= G[i]; } return c >>> 0; }
+function bech32(hrp, ver, prog) {
+  const bits = []; let acc = 0, n = 0;
+  for (const x of prog) { acc = (acc << 8) | x; n += 8; while (n >= 5) { n -= 5; bits.push((acc >> n) & 31); } }
+  if (n) bits.push((acc << (5 - n)) & 31);
+  const data = [ver, ...bits];
+  const exp = [...hrp].map((c) => c.charCodeAt(0) >> 5).concat([0], [...hrp].map((c) => c.charCodeAt(0) & 31));
+  const konst = ver === 0 ? 1 : 0x2bc830a3;
+  const pm = polymod([...exp, ...data, 0, 0, 0, 0, 0, 0]) ^ konst;
+  const chk = []; for (let i = 0; i < 6; i++) chk.push((pm >> (5 * (5 - i))) & 31);
+  return hrp + '1' + [...data, ...chk].map((d) => BCH[d]).join('');
+}
+function classify(spk) {
+  const b = hexToBytes(spk); const L = b.length;
+  if (L === 25 && b[0] === 0x76 && b[1] === 0xa9 && b[2] === 20 && b[23] === 0x88 && b[24] === 0xac) return { type: 'p2pkh', label: 'pay to pubkey hash', address: base58check(new Uint8Array([0, ...b.subarray(3, 23)])) };
+  if (L === 23 && b[0] === 0xa9 && b[1] === 20 && b[22] === 0x87) return { type: 'p2sh', label: 'pay to script hash', address: base58check(new Uint8Array([5, ...b.subarray(2, 22)])) };
+  if (L === 22 && b[0] === 0 && b[1] === 20) return { type: 'p2wpkh', label: 'native segwit v0', address: bech32('bc', 0, b.subarray(2)) };
+  if (L === 34 && b[0] === 0 && b[1] === 32) return { type: 'p2wsh', label: 'native segwit v0 script', address: bech32('bc', 0, b.subarray(2)) };
+  if (L === 34 && b[0] === 0x51 && b[1] === 32) return { type: 'p2tr', label: 'taproot', address: bech32('bc', 1, b.subarray(2)) };
+  if ((L === 35 || L === 67) && b[L - 1] === 0xac && b[0] === L - 2) return { type: 'p2pk', label: 'pay to pubkey', pubkey: bytesToHex(b.subarray(1, L - 1)), address: base58check(new Uint8Array([0, ...hash160(b.subarray(1, L - 1))])), derived: true };
+  if (b[0] === 0x6a) return { type: 'op_return', label: 'data carrier, unspendable' };
+  if (L >= 4 && b[0] >= 0x51 && b[0] <= 0x60 && b[L - 1] === 0xae) return { type: 'bare multisig', label: 'bare multisig' };
+  return { type: 'nonstandard', label: 'non-standard script' };
+}
+
+// ---------- render ----------
+const fmtBtc = (sats) => { const s = BigInt(sats); const i = s / 100000000n, f = (s % 100000000n).toString().padStart(8, '0'); const t = f.replace(/0+$/, ''); return { i: i.toString(), f, keep: t.length }; };
+function renderCoin() {
+  const { out } = state; const coin = $('coin');
+  if (!out) { coin.classList.add('empty'); $('amt').textContent = '—'; $('sats').innerHTML = '&nbsp;'; return; }
+  coin.classList.remove('empty');
+  const { i, f, keep } = fmtBtc(out.value);
+  $('amt').innerHTML = `${i}<span class="frac">.<b>${f.slice(0, keep)}</b>${f.slice(keep)}</span>`;
+  $('sats').textContent = Number(out.value).toLocaleString() + ' sats';
+}
+function pill(cls, text) { $('pill').className = 'pill ' + cls; $('pill').lastElementChild.textContent = text; }
+function renderRows() {
+  const { txid, vout, tx, out, status, spend, verified } = state;
+  const cls = classify(out.scriptPubKey);
+  const addr = cls.address ? `${cls.address}${cls.derived ? ' <small>(hash of the pubkey; the coin is locked to the key itself)</small>' : ''}` : cls.pubkey ? `<small>no address:</small> pubkey ${cls.pubkey}` : '<small>none</small>';
+  const rows = [
+    ['outpoint', `${txid}<small>:${vout}</small>`],
+    ['value', `${Number(out.value).toLocaleString()} sats <small>= ${(() => { const { i, f } = fmtBtc(out.value); return i + '.' + f; })()} BTC</small>`],
+    ['locked by', `<span class="tag">${cls.type}</span>${cls.label}`],
+    ['address', addr],
+    ['scriptPubKey', `<div class="asm">${asm(out.scriptPubKey).map((t) => t.startsWith('OP_') ? `<b>${t}</b>` : t).join(' ')}</div><div class="hex">${out.scriptPubKey}</div>`],
+    ['status', spend ? (spend.spent ? `<span class="no">spent</span> by ${spend.txid}<small>:${spend.vin}</small>${spend.status?.block_height ? ` <small>in block ${spend.status.block_height.toLocaleString()}</small>` : ''}` : '<span class="ok">unspent</span>') : '<small>unknown</small>'],
+    ['confirmed', status ? (status.confirmed ? `block ${status.block_height.toLocaleString()} <small>· ${new Date(status.block_time * 1000).toUTCString()}</small>` : '<small>in the mempool</small>') : '<small>unknown</small>'],
+    ['transaction', `version ${tx.version} · ${tx.inputs.length} in · ${tx.outputs.length} out · ${codec.txSize(tx)} bytes · ${codec.txVsize(tx)} vbytes${tx.witness ? ' · segwit' : ''} · lockTime ${tx.lockTime}`],
+    ['kernel check', verified ? `<span class="ok">✓ txid recomputed from the bytes matches</span> <small>dsha256 of the legacy serialization, reversed</small>` : `<span class="no">✗ txid mismatch</span>`],
+  ];
+  $('rows').innerHTML = rows.map(([k, v]) => `<div class="row"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+}
+const fail = (html) => { $('rows').innerHTML = `<p class="msg err">${html}</p>`; pill('', 'error'); };
+
+// ---------- the pipeline: reference → fetch → verify → show ----------
+let run = 0;
+async function show(ref) {
+  const my = ++run;
+  const island = ref.island || null;
+  if (island) { ref.txid = island.txid?.toLowerCase(); ref.vout = Number(island.vout ?? 0); }
+  if (!HEX64.test(ref.txid || '')) return fail('the reference needs a 64-hex txid');
+  Object.assign(state, { txid: ref.txid, vout: ref.vout, tx: null, hex: null, out: null, status: null, spend: null, verified: false });
+  $('ref').value = `${ref.txid}:${ref.vout}`;
+  if (!island) history.replaceState(null, '', `#${ref.txid}:${ref.vout}`);
+  document.title = `utxo · ${ref.txid.slice(0, 8)}…:${ref.vout}`;
+  renderCoin(); pill('pending', 'fetching'); rail('ref', 'done'); rail('fetch');
+  $('ledger').classList.add('in'); $('rows').innerHTML = '<p class="msg">fetching the transaction…</p>';
+  try {
+    if (!codec) {
+      const core = await (await fetch('https://bitcoin-kernel.com/engine/schema/core.jsonld')).json();
+      codec = new Codec(core);
+    }
+    // 1. get the transaction: from the island (hex or decoded) or from an explorer
+    const t = island?.transaction;
+    let tx, hex;
+    if (t?.hex) { hex = t.hex; tx = codec.decode('Transaction', hex); }
+    else if (t?.outputs) { tx = t; hex = codec.encodeHex('Transaction', tx); }
+    else { hex = (await api(`/tx/${ref.txid}/hex`, true)).trim(); tx = codec.decode('Transaction', hex); }
+    if (my !== run) return;
+    rail('verify');
+    // 2. verify: the kernel recomputes the txid from the bytes
+    const txid = codec.txid(tx);
+    const verified = txid === ref.txid;
+    const out = tx.outputs[ref.vout];
+    Object.assign(state, { tx, hex, verified, out: out || null });
+    if (!verified) { renderRows(); rail('verify', 'bad'); return fail(`the bytes hash to <code>${txid}</code>, not the txid you asked for. Refusing to show it.`); }
+    if (!out) { rail('verify', 'bad'); return fail(`this transaction has ${tx.outputs.length} output${tx.outputs.length === 1 ? '' : 's'}; there is no output ${ref.vout}`); }
+    // 3. show
+    rail('show', 'done'); renderCoin(); renderRows(); writeIsland(); $('island').classList.add('in'); $('transfer').classList.add('in');
+    pill('pending', 'checking spend');
+    // 4. spent or not (best effort, separate so the coin shows even if this fails)
+    const [status, spend] = await Promise.all([api(`/tx/${ref.txid}/status`).catch(() => null), api(`/tx/${ref.txid}/outspend/${ref.vout}`).catch(() => null)]);
+    if (my !== run) return;
+    Object.assign(state, { status, spend });
+    renderRows();
+    if (spend) pill(spend.spent ? 'spent' : 'unspent', spend.spent ? 'spent' : 'unspent'); else pill('', 'spend status unknown');
+  } catch (e) {
+    if (my !== run) return;
+    rail('fetch', 'bad'); fail(esc(e.message || e));
+  }
+}
+
+// ---------- wiring ----------
+$('form').addEventListener('submit', (e) => { e.preventDefault(); try { const r = parseRef($('ref').value); if (r) show(r); } catch (err) { fail(err.message); } });
+for (const b of document.querySelectorAll('[data-mode]')) b.addEventListener('click', () => { state.mode = b.dataset.mode; writeIsland(); });
+$('copyld').addEventListener('click', async () => { await navigator.clipboard.writeText($('utxo').textContent.trim()); $('copyld').textContent = 'copied'; setTimeout(() => ($('copyld').textContent = 'copy'), 1200); });
+$('copylink').addEventListener('click', async () => { await navigator.clipboard.writeText(location.href); $('copylink').textContent = 'copied'; setTimeout(() => ($('copylink').textContent = 'copy link'), 1200); });
+const fromUrl = () => { const h = location.hash.slice(1) || qs.get('utxo') || qs.get('u'); if (!h) return null; try { return parseRef(decodeURIComponent(h)); } catch { return null; } };
+window.addEventListener('hashchange', () => { const r = fromUrl(); if (r) show(r); });
+
+// start: the URL wins, otherwise the island on the page is the source of truth
+const first = fromUrl();
+if (first) show(first);
+else { const isl = readIsland(); if (isl?.txid) show({ island: isl }); }
+</script>
+</body>
+</html>
