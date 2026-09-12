@@ -123,11 +123,12 @@
     box-shadow:inset 0 2px 0 rgba(255,255,255,.9),inset 0 -20px 40px rgba(184,101,10,.12),inset 0 0 0 1px rgba(232,131,12,.18);
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.15rem;text-align:center;padding:1rem}
   .coin .face::after{content:"";position:absolute;inset:0;border-radius:50%;background:linear-gradient(160deg,rgba(255,255,255,.7),transparent 45%);pointer-events:none}
-  .coin .amt{font:700 2.2rem/1 var(--mono);letter-spacing:-1px;color:var(--fg);word-break:break-all}
+  .coin .amt{font:700 2.2rem/1 var(--mono);letter-spacing:-1px;color:var(--fg);white-space:nowrap}
+  .coin .amt.l1{font-size:1.7rem;letter-spacing:-.6px}.coin .amt.l2{font-size:1.32rem;letter-spacing:-.4px}.coin .amt.l3{font-size:1.05rem;letter-spacing:-.2px}
   .coin .amt .frac{font-size:1.05rem;color:var(--mut);letter-spacing:0}
   .coin .amt .frac b{font-weight:600;color:var(--fg)}
   .coin .unit{font:600 .7rem var(--mono);letter-spacing:.3em;color:var(--ac2);margin-top:.35rem}
-  .coin .sats{font:.72rem var(--mono);color:var(--dim);margin-top:.15rem}
+  .coin .sats{font:.8rem var(--mono);color:var(--mut);margin-top:.3rem}.coin .sats b{font-weight:600;color:var(--fg)}.coin .sats span{color:var(--dim)}
   .coin.empty .amt{color:var(--dim)}
   .coin.empty .ring{animation-duration:40s;opacity:.35}
   .pill{display:inline-flex;align-items:center;gap:.45rem;padding:.35rem .8rem;border-radius:99px;border:1px solid var(--bd2);font:600 .7rem var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--mut);background:var(--pan)}
@@ -211,7 +212,7 @@
         <div class="ring"></div><div class="ring2"></div>
         <div class="face">
           <div class="amt" id="amt">—</div>
-          <div class="unit" id="unit">BTC</div>
+          <div class="unit">sats</div>
           <div class="sats" id="sats">&nbsp;</div>
         </div>
       </div>
@@ -409,12 +410,12 @@ function classify(spk, C) {
 const fmtCoin = (sats) => { const s = BigInt(sats); const i = s / 100000000n, f = (s % 100000000n).toString().padStart(8, '0'); const t = f.replace(/0+$/, ''); return { i: i.toString(), f, keep: t.length }; };
 function renderCoin() {
   const { out, chain } = state; const coin = $('coin');
-  $('unit').textContent = CHAINS[chain].unit;
   if (!out) { coin.classList.add('empty'); $('amt').textContent = '—'; $('sats').innerHTML = '&nbsp;'; return; }
   coin.classList.remove('empty');
+  const sats = Number(out.value).toLocaleString();
+  $('amt').textContent = sats; $('amt').className = 'amt ' + (sats.length <= 7 ? '' : sats.length <= 10 ? 'l1' : sats.length <= 14 ? 'l2' : 'l3');
   const { i, f, keep } = fmtCoin(out.value);
-  $('amt').innerHTML = `${i}<span class="frac">.<b>${f.slice(0, keep)}</b>${f.slice(keep)}</span>`;
-  $('sats').textContent = Number(out.value).toLocaleString() + ' sats';
+  $('sats').innerHTML = `${i}.<b>${f.slice(0, keep)}</b><span>${f.slice(keep)}</span> ${CHAINS[chain].unit}`;
 }
 function pill(cls, text) { $('pill').className = 'pill ' + cls; $('pill').lastElementChild.textContent = text; }
 function renderRows() {
