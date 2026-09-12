@@ -72,6 +72,8 @@
 }
 </script>
 
+<script type="importmap">{"imports":{"@noble/curves/secp256k1":"https://esm.sh/@noble/curves@1.4.0/secp256k1","@noble/hashes/sha256":"https://esm.sh/@noble/hashes@1.4.0/sha256"}}</script>
+
 <style>
   :root{
     --bg:#fbfaf7; --bg2:#ffffff; --pan:#ffffff; --bd:#ebe7df; --bd2:#d9d3c7;
@@ -190,6 +192,20 @@
   .transfer .fake button{border:1px solid var(--bd2);background:none;color:var(--mut);border-radius:10px;padding:.6rem 1rem;font:600 .86rem var(--sans);cursor:not-allowed}
   .lock{position:absolute;top:.7rem;right:1rem;font:600 .66rem var(--mono);letter-spacing:.14em;color:var(--dim);border:1px solid var(--bd);border-radius:99px;padding:.2rem .6rem}
 
+  .frow{display:grid;grid-template-columns:2.6rem 1fr auto;gap:.6rem;align-items:center}
+  .frow label{font:.74rem var(--mono);color:var(--dim)}
+  .frow input{min-width:0;background:#faf8f3;border:1px solid var(--bd);border-radius:10px;padding:.6rem .8rem;font:.86rem var(--mono);color:var(--fg);outline:0}
+  .frow input:focus{border-color:rgba(232,131,12,.7);box-shadow:0 0 0 3px rgba(232,131,12,.14)}
+  .frow input:disabled{opacity:.5}
+  .frow .u{font:.74rem var(--mono);color:var(--dim);min-width:3.2rem}
+  .tact{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap}
+  .go{border:0;border-radius:10px;padding:.6rem 1.1rem;font:600 .9rem var(--sans);color:#fff;background:linear-gradient(180deg,#f39a2a,var(--ac));cursor:pointer;box-shadow:0 6px 18px rgba(232,131,12,.3)}
+  .go:hover{filter:brightness(1.06)}.go:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+  .tstat{font:.8rem var(--mono);color:var(--mut)}
+  .inner{border:1px solid var(--bd);border-radius:12px;overflow:hidden;background:#fff}
+  .inner pre{max-height:9rem;font-size:.7rem;border-top:1px solid var(--bd)}
+  .done{padding:.9rem 1rem;border-radius:12px;background:#eaf6ee;border:1px solid rgba(26,127,55,.3);color:#1a5c2c;font-size:.92rem;line-height:1.6;word-break:break-all}
+  .done .mono{font:.82rem var(--mono)}.done a{color:var(--good);font-weight:600}
   footer{margin:3rem 0 2rem;color:var(--dim);font:.78rem/1.7 var(--mono)}
   footer .links{display:flex;gap:1.2rem;flex-wrap:wrap;margin-bottom:.5rem}
   footer a{color:var(--mut)}
@@ -251,11 +267,19 @@
 
   <section class="fade" id="transfer">
     <div class="card transfer">
-      <span class="lock">next</span>
+      <span class="lock" id="tlock">next</span>
       <h2>transfer</h2>
       <div class="body">
-        <p>The next step is to spend this coin: build a transaction with this output as its only input, sign it in the browser, and broadcast. The kernel already knows how to serialize it; what is missing is a key.</p>
-        <div class="fake"><input placeholder="destination address" disabled><button disabled>Sign &amp; send</button></div>
+        <p id="tnote">Spend the shown coin: one input, one output, signed in this tab, broadcast to its chain.</p>
+        <div class="frow"><label for="tdest">to</label><input id="tdest" placeholder="destination address" spellcheck="false" autocomplete="off" disabled><span class="u"></span></div>
+        <div class="frow"><label for="tfee">fee</label><input id="tfee" type="number" min="0.1" step="0.1" placeholder="1" disabled><span class="u">sat/vB</span></div>
+        <div class="frow"><label for="tkey">key</label><input id="tkey" type="password" placeholder="nsec… · 64 hex · WIF — never leaves this tab" autocomplete="off" disabled><span class="u"></span></div>
+        <div class="tact"><button class="go" id="tsign" disabled>Sign</button><span class="tstat" id="tstat"></span></div>
+        <div id="tsigned" hidden>
+          <div class="inner"><div id="trows"></div><pre id="thex"></pre></div>
+          <div class="tact"><button class="go" id="tsend">Broadcast</button><button class="btn" id="tcopy">copy hex</button><span class="tstat" id="tstat2"></span></div>
+        </div>
+        <div id="tdone" class="done" hidden></div>
       </div>
     </div>
   </section>
@@ -294,6 +318,7 @@ const apisFor = (chain) => API_OVERRIDE || CHAINS[chain].api;
 const txoUri = (chain, txid, vout) => `txo:${chain}:${txid}:${vout}`;
 
 // ---------- state ----------
+const T = { lib: null, ok: false, signed: null, feeFor: null };
 const state = { chain: 'btc', txid: null, vout: null, tx: null, hex: null, out: null, status: null, spend: null, mode: 'link', verified: false };
 let codec = null;
 
@@ -302,7 +327,7 @@ const rail = (step, cls) => {
   const order = ['ref', 'fetch', 'verify', 'show', 'transfer'];
   for (const li of $('rail').children) {
     const i = order.indexOf(li.dataset.s), j = order.indexOf(step);
-    li.className = li.dataset.s === 'transfer' ? 'locked' : i < j ? 'done' : i === j ? (cls || 'on') : '';
+    li.className = (li.dataset.s === 'transfer' && !T.ok) ? 'locked' : i < j ? 'done' : i === j ? (cls || 'on') : '';
   }
 };
 
@@ -495,6 +520,7 @@ async function show(ref) {
     if (!out) { rail('verify', 'bad'); return fail(`this transaction has ${tx.outputs.length} output${tx.outputs.length === 1 ? '' : 's'}; there is no output ${ref.vout}`); }
     // 3. show
     rail('show', 'done'); renderCoin(); renderRows(); writeIsland(); $('island').classList.add('in'); $('transfer').classList.add('in');
+    transferSetup();
     pill('pending', 'checking spend');
     // 4. spent or not (best effort, separate so the coin shows even if this fails)
     const [status, spends] = await Promise.all([api(ref.chain, `/tx/${ref.txid}/status`).catch(() => null), api(ref.chain, `/tx/${ref.txid}/outspends`).catch(() => null)]);
@@ -503,11 +529,161 @@ async function show(ref) {
     Object.assign(state, { status, spend });
     renderRows();
     if (spend) pill(spend.spent ? 'spent' : 'unspent', spend.spent ? 'spent' : 'unspent'); else pill('', 'spend status unknown');
+    transferSetup();
   } catch (e) {
     if (my !== run) return;
     rail('fetch', 'bad'); fail(esc(e.message || e));
   }
 }
+
+// ---------- transfer: spend the shown coin ----------
+// Taproot key-path only in this version. XBT/TXBT sign with the unified sighash (0x21) from the
+// blaketest wallet, which a SHA256d node cannot reconstruct, so the spend cannot be replayed there.
+// BTC/TBTC sign a plain BIP341 SIGHASH_DEFAULT. The signer is loaded on first use.
+const unifiedFor = (chain) => chain === 'xbt' || chain === 'txbt';
+async function signer() {
+  if (T.lib) return T.lib;
+  const B = 'https://cdn.jsdelivr.net/gh/bitcoin-blake/blaketest@df14e48/';
+  const [btc, uni, curves] = await Promise.all([import(B + 'bitcoin.js'), import(B + 'unified.js'), import('@noble/curves/secp256k1')]);
+  return (T.lib = { parsePrivateKey: btc.parsePrivateKey, getXOnlyPubKey: btc.getXOnlyPubKey, bech32Decode: btc.bech32Decode, convertBits: btc.convertBits, BECH32_CONST: btc.BECH32_CONST, BECH32M_CONST: btc.BECH32M_CONST, unifiedSighash: uni.unifiedSighash, SIGHASH_ALL: uni.SIGHASH_ALL, SIGHASH_UNIFIED: uni.SIGHASH_UNIFIED, SCRIPT_TYPE_TAPROOT: uni.SCRIPT_TYPE_TAPROOT, schnorr: curves.schnorr, secp: curves.secp256k1 });
+}
+const le32 = (n) => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
+const le64 = (v) => { const b = new Uint8Array(8); new DataView(b.buffer).setBigInt64(0, BigInt(v), true); return b; };
+
+function addrToScript(addr, C, L) {
+  const a = addr.trim();
+  if (!a) throw new Error('need a destination address');
+  if (a.toLowerCase().includes('1') && /^[a-z]+1[a-z0-9]+$/i.test(a) && !/^[1-9A-HJ-NP-Za-km-z]{25,35}$/.test(a)) {
+    const d = L.bech32Decode(a); if (!d) throw new Error('bad bech32 address');
+    if (d.hrp !== C.hrp) throw new Error(`that address is ${d.hrp}1…, ${C.name} uses ${C.hrp}1…`);
+    const ver = d.data[0]; const prog = new Uint8Array(L.convertBits(d.data.slice(1), 5, 8, false));
+    if (d.spec !== (ver === 0 ? L.BECH32_CONST : L.BECH32M_CONST)) throw new Error('bad address checksum');
+    if (ver === 0 && (prog.length === 20 || prog.length === 32)) return bytesToHex(new Uint8Array([0, prog.length, ...prog]));
+    if (ver === 1 && prog.length === 32) return bytesToHex(new Uint8Array([0x51, 0x20, ...prog]));
+    throw new Error('unknown witness program');
+  }
+  if (/^[1-9A-HJ-NP-Za-km-z]+$/.test(a)) {
+    let n = 0n; for (const c of a) n = n * 58n + BigInt(B58.indexOf(c));
+    const bytes = []; while (n > 0n) { bytes.unshift(Number(n % 256n)); n /= 256n; }
+    for (const c of a) { if (c !== '1') break; bytes.unshift(0); }
+    const b = Uint8Array.from(bytes); if (b.length !== 25) throw new Error('bad base58 address');
+    const body = b.subarray(0, 21), chk = sha256(sha256(body)).subarray(0, 4);
+    if (!chk.every((x, i) => x === b[21 + i])) throw new Error('bad address checksum');
+    if (body[0] === C.p2pkh) return '76a914' + bytesToHex(body.subarray(1)) + '88ac';
+    if (body[0] === C.p2sh) return 'a914' + bytesToHex(body.subarray(1)) + '87';
+    throw new Error('that address is for another network');
+  }
+  throw new Error(`need a ${C.name} address (${C.hrp}1… or base58)`);
+}
+
+// The key that signs for this output: the raw key if the output key is the untweaked pubkey
+// (blaketest style), else the BIP86-tweaked key. Anything else does not control the coin.
+function keyForCoin(priv, spk, L) {
+  const target = spk.slice(4);
+  const xonly = L.getXOnlyPubKey(priv);
+  if (bytesToHex(xonly) === target) return priv;
+  const n = L.secp.CURVE.n;
+  let d = L.secp.utils.normPrivateKeyToScalar(priv);
+  if (L.secp.ProjectivePoint.fromPrivateKey(priv).toAffine().y % 2n === 1n) d = n - d;
+  const t = BigInt('0x' + bytesToHex(L.schnorr.utils.taggedHash('TapTweak', xonly)));
+  const tweaked = hexToBytes(((d + t) % n).toString(16).padStart(64, '0'));
+  if (bytesToHex(L.schnorr.getPublicKey(tweaked)) === target) return tweaked;
+  throw new Error('this key does not control this coin');
+}
+
+function signUnified(L, key, coin, destSpk, amount) {
+  const tx = { version: 2, locktime: 0, inputs: [{ txid: hexToBytes(coin.txid).reverse(), vout: coin.vout, sequence: 0xfffffffd }], outputs: [{ value: BigInt(amount), script: hexToBytes(destSpk) }] };
+  const ht = L.SIGHASH_ALL | L.SIGHASH_UNIFIED;
+  const h = L.unifiedSighash(tx, 0, ht, L.SCRIPT_TYPE_TAPROOT, [{ value: BigInt(coin.value), script: hexToBytes(coin.spk) }]);
+  return bytesToHex(L.schnorr.sign(h, key)) + ht.toString(16).padStart(2, '0');
+}
+function signBip341(L, key, coin, destSpk, amount) {
+  const spk = hexToBytes(coin.spk), dest = hexToBytes(destSpk), seq = [0xfd, 0xff, 0xff, 0xff];
+  const hashPrevouts = sha256(Uint8Array.from([...hexToBytes(coin.txid).reverse(), ...le32(coin.vout)]));
+  const hashAmounts = sha256(le64(coin.value));
+  const hashSpks = sha256(Uint8Array.from([spk.length, ...spk]));
+  const hashSeqs = sha256(Uint8Array.from(seq));
+  const hashOutputs = sha256(Uint8Array.from([...le64(amount), dest.length, ...dest]));
+  const msg = Uint8Array.from([0x00, 0x00, ...le32(2), ...le32(0), ...hashPrevouts, ...hashAmounts, ...hashSpks, ...hashSeqs, ...hashOutputs, 0x00, ...le32(0)]);
+  return bytesToHex(L.schnorr.sign(L.schnorr.utils.taggedHash('TapSighash', msg), key));
+}
+
+async function post(chain, path, body) {
+  let last;
+  for (const base of apisFor(chain)) {
+    try {
+      const r = await fetch(base + path, { method: 'POST', body });
+      const t = (await r.text()).trim();
+      if (r.ok) { $('prov').textContent = new URL(base).host; return t; }
+      let msg = t; try { msg = JSON.parse(t).error || t; } catch {}
+      const code = /"code\\?":\s*(-\d+)/.exec(msg)?.[1];
+      const why = { '-25': 'the input is missing or already spent', '-26': 'rejected by the node\'s policy or consensus rules', '-27': 'already in the chain' }[code];
+      const e = new Error((why ? why + ' · ' : '') + msg); e.final = r.status === 400; throw e;
+    } catch (e) { last = e; if (e.final) break; }
+  }
+  throw last;
+}
+
+function transferSetup() {
+  const { out, spend, chain } = state; const C = CHAINS[chain];
+  const cls = out ? classify(out.scriptPubKey, C) : null;
+  T.ok = !!out && cls.type === 'p2tr' && !(spend && spend.spent);
+  $('tnote').textContent = !out ? 'Show a coin first.'
+    : spend?.spent ? 'This coin is already spent. Follow the spending transaction above to find where it went.'
+    : cls.type !== 'p2tr' ? `This version spends taproot key-path coins only. This coin is ${cls.type}.`
+    : `Sweep the whole coin to one ${C.name} address. ${unifiedFor(chain) ? 'Signed with the unified sighash (0x21), so the spend cannot be replayed on the SHA256d chain.' : 'Signed as a BIP341 key-path spend.'} The key never leaves this tab.`;
+  for (const id of ['tdest', 'tfee', 'tkey', 'tsign']) $(id).disabled = !T.ok;
+  $('tsigned').hidden = true; $('tdone').hidden = true; $('tstat').textContent = ''; $('tstat2').textContent = ''; $('tsend').disabled = false;
+  $('tlock').textContent = T.ok ? 'step 5' : 'next';
+  $('tdest').placeholder = `${C.hrp}1… or base58 ${C.name} address`;
+  if (T.ok && T.feeFor !== chain) { T.feeFor = chain; api(chain, '/v1/fees/recommended').then((f) => { if (!$('tfee').value) $('tfee').value = f.hourFee || 1; }).catch(() => { if (!$('tfee').value) $('tfee').value = 1; }); }
+  rail('show', 'done');
+}
+
+$('tsign').addEventListener('click', async () => {
+  try {
+    $('tstat').textContent = 'loading the signer…'; $('tsign').disabled = true;
+    const L = await signer();
+    const { out, txid, vout, chain } = state; const C = CHAINS[chain];
+    const destSpk = addrToScript($('tdest').value, C, L);
+    const rate = Number($('tfee').value); if (!(rate > 0)) throw new Error('fee rate must be positive');
+    const key = keyForCoin(L.parsePrivateKey($('tkey').value), out.scriptPubKey, L);
+    const unified = unifiedFor(chain);
+    const vsize = Math.ceil((4 * (60 + destSpk.length / 2) + 4 + (unified ? 65 : 64)) / 4);
+    const fee = Math.ceil(vsize * rate), amount = out.value - fee;
+    if (amount < 330) throw new Error(`a ${fee} sat fee leaves ${amount} sats, below dust`);
+    const coin = { txid, vout, value: out.value, spk: out.scriptPubKey };
+    const sig = unified ? signUnified(L, key, coin, destSpk, amount) : signBip341(L, key, coin, destSpk, amount);
+    const tx = { version: 2, inputs: [{ prevout: { txid, vout }, scriptSig: '', sequence: 0xfffffffd }], outputs: [{ value: amount, scriptPubKey: destSpk }], witness: [[sig]], lockTime: 0 };
+    const hex = codec.encodeHex('Transaction', tx);
+    T.signed = { hex, txid: codec.txid(tx), fee, amount, vsize: codec.txVsize(tx), dest: $('tdest').value.trim(), unified };
+    $('tkey').value = '';
+    const s = T.signed;
+    $('trows').innerHTML = [
+      ['sends', `${s.amount.toLocaleString()} sats <small>to</small> ${esc(s.dest)}`],
+      ['fee', `${s.fee.toLocaleString()} sats <small>· ${s.vsize} vbytes · ${(s.fee / s.vsize).toFixed(2)} sat/vB</small>`],
+      ['sighash', s.unified ? 'unified 0x21 <small>· replay-protected, BLAKE2b chain only</small>' : 'BIP341 default'],
+      ['txid', s.txid],
+    ].map(([k, v]) => `<div class="row"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+    $('thex').textContent = s.hex;
+    $('tsigned').hidden = false; $('tstat').textContent = 'signed. Nothing is sent until you broadcast.';
+    rail('transfer');
+  } catch (e) { $('tstat').textContent = e.message || String(e); }
+  finally { $('tsign').disabled = !T.ok; }
+});
+$('tcopy').addEventListener('click', async () => { await navigator.clipboard.writeText(T.signed.hex); $('tcopy').textContent = 'copied'; setTimeout(() => ($('tcopy').textContent = 'copy hex'), 1200); });
+$('tsend').addEventListener('click', async () => {
+  const { chain } = state; const C = CHAINS[chain];
+  try {
+    $('tsend').disabled = true; $('tstat2').textContent = 'broadcasting…';
+    const id = (await post(chain, '/tx', T.signed.hex)).replace(/"/g, '');
+    const uri = txoUri(chain, id, 0);
+    $('tdone').innerHTML = `<b>Sent.</b> ${C.name} accepted <span class="mono">${esc(id)}</span>. <a href="${C.explorer}${esc(id)}" target="_blank" rel="noopener">explorer ↗</a><br>The coin moved. Follow it: <a href="?txo=${uri}" data-txo="${uri}" class="follow">${uri}</a>`;
+    $('tdone').querySelector('.follow').addEventListener('click', (e) => { e.preventDefault(); show(parseRef(uri)); });
+    $('tdone').hidden = false; $('tstat2').textContent = '';
+    rail('transfer', 'done');
+  } catch (e) { $('tstat2').textContent = 'rejected: ' + (e.message || e); $('tsend').disabled = false; }
+});
 
 // ---------- wiring ----------
 $('form').addEventListener('submit', (e) => { e.preventDefault(); try { const r = parseRef($('ref').value); if (r) show(r); } catch (err) { fail(err.message); } });
