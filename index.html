@@ -29,8 +29,8 @@
   JSON-LD using the terms of bitcoin-kernel's core schema (btc:TransactionOutput,
   btc:OutPoint, btc:txid, btc:vout, btc:value, btc:scriptPubKey, btc:Transaction ...).
 
-  The @id is a txo: URI, txo:<chain>:<txid>:<vout>, where chain is btc, tbtc, xbt or txbt.
-  The same URI goes in the query string: ?txo=txo:txbt:<txid>:<vout>
+  The @id is a txo: URI, txo:<chain>:<txid>:<vout>, where chain is btc, tbtc4, xbt or txbt4 (tbtc and txbt, the older spellings, are accepted).
+  The same URI goes in the query string: ?txo=txo:txbt4:<txid>:<vout>
 
   "transaction" may be given three ways:
     1. a link      { "@id": "https://mempool.guide/testnet4/api/tx/<txid>/hex" }
@@ -64,8 +64,8 @@
     "transaction": { "@id": "btc:transaction", "@type": "@id" }
   },
   "@type": "btc:TransactionOutput",
-  "@id": "txo:txbt:dc8593286547fbd648829499a74a1ff6c62add8d5b77b4942b41c5c5cdcd6e18:0",
-  "chain": "txbt",
+  "@id": "txo:txbt4:dc8593286547fbd648829499a74a1ff6c62add8d5b77b4942b41c5c5cdcd6e18:0",
+  "chain": "txbt4",
   "txid": "dc8593286547fbd648829499a74a1ff6c62add8d5b77b4942b41c5c5cdcd6e18",
   "vout": 0,
   "transaction": { "@id": "https://mempool.guide/testnet4/api/tx/dc8593286547fbd648829499a74a1ff6c62add8d5b77b4942b41c5c5cdcd6e18/hex" }
@@ -230,10 +230,10 @@
   <h1>One coin, <em>shown</em>.</h1>
   <p class="sub">Give it an output as a <code>txo:</code> URI. It fetches the transaction, checks it with bitcoin-kernel right here in your browser, and shows you the coin. Bitcoin, or the BLAKE2b chain.</p>
   <form class="ref" id="form" autocomplete="off">
-    <input id="ref" placeholder="txo:txbt:txid:vout  ·  or an explorer link  ·  or paste JSON-LD" spellcheck="false">
+    <input id="ref" placeholder="txo:txbt4:txid:vout  ·  or an explorer link  ·  or paste JSON-LD" spellcheck="false">
     <button type="submit">Show</button>
   </form>
-  <p class="hint">try <a href="?txo=txo:txbt:dc8593286547fbd648829499a74a1ff6c62add8d5b77b4942b41c5c5cdcd6e18:0" data-txo="txo:txbt:dc8593286547fbd648829499a74a1ff6c62add8d5b77b4942b41c5c5cdcd6e18:0">a TXBT taproot coin</a> · <a href="?txo=txo:btc:4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b:0" data-txo="txo:btc:4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b:0">the genesis coin</a> · <a href="?txo=txo:btc:a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d:0" data-txo="txo:btc:a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d:0">10,000 BTC for two pizzas</a> · <span>chains: btc, tbtc, xbt, txbt</span></p>
+  <p class="hint">try <a href="?txo=txo:txbt4:dc8593286547fbd648829499a74a1ff6c62add8d5b77b4942b41c5c5cdcd6e18:0" data-txo="txo:txbt4:dc8593286547fbd648829499a74a1ff6c62add8d5b77b4942b41c5c5cdcd6e18:0">a TXBT taproot coin</a> · <a href="?txo=txo:btc:4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b:0" data-txo="txo:btc:4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b:0">the genesis coin</a> · <a href="?txo=txo:btc:a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d:0" data-txo="txo:btc:a1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d:0">10,000 BTC for two pizzas</a> · <span>chains: btc, tbtc, xbt, txbt</span></p>
   <ol class="rail" id="rail">
     <li data-s="ref">Reference</li><li data-s="fetch">Fetch</li><li data-s="verify">Verify</li><li data-s="show">Display</li><li data-s="transfer" class="locked">Transfer</li>
   </ol>
@@ -312,10 +312,12 @@ const HEX64 = /^[0-9a-f]{64}$/i;
 // only changed the header hash, so the kernel's txid check applies unchanged.
 const CHAINS = {
   btc:  { name: 'Bitcoin',                  unit: 'BTC',  api: ['https://mempool.space/api', 'https://blockstream.info/api'], explorer: 'https://mempool.space/tx/', hrp: 'bc', p2pkh: 0x00, p2sh: 0x05 },
-  tbtc: { name: 'Bitcoin testnet4',         unit: 'TBTC', api: ['https://mempool.space/testnet4/api'], explorer: 'https://mempool.space/testnet4/tx/', hrp: 'tb', p2pkh: 0x6f, p2sh: 0xc4 },
+  tbtc4: { name: 'Bitcoin testnet4',         unit: 'TBTC', api: ['https://mempool.space/testnet4/api'], explorer: 'https://mempool.space/testnet4/tx/', hrp: 'tb', p2pkh: 0x6f, p2sh: 0xc4 },
   xbt:  { name: 'Bitcoin BLAKE2b',          unit: 'XBT',  api: ['https://mempool.kilombino.com/api'], explorer: 'https://mempool.kilombino.com/tx/', hrp: 'bc', p2pkh: 0x00, p2sh: 0x05 },
-  txbt: { name: 'Bitcoin BLAKE2b testnet4', unit: 'TXBT', api: ['https://mempool.guide/testnet4/api', 'https://mempool.kilombino.com/testnet4/api'], explorer: 'https://mempool.guide/testnet4/tx/', hrp: 'tb', p2pkh: 0x6f, p2sh: 0xc4 },
+  txbt4: { name: 'Bitcoin BLAKE2b testnet4', unit: 'TXBT', api: ['https://mempool.guide/testnet4/api', 'https://mempool.kilombino.com/testnet4/api'], explorer: 'https://mempool.guide/testnet4/tx/', hrp: 'tb', p2pkh: 0x6f, p2sh: 0xc4 },
 };
+// older spellings of the same chains (and git-mark's name for mainnet) are accepted and shown as the canonical id
+const ALIAS = { tbtc: 'tbtc4', txbt: 'txbt4', mainnet: 'btc' }; const canon = (c) => ALIAS[c] ?? c;
 const qs = new URLSearchParams(location.search);
 const API_OVERRIDE = qs.get('api') ? [qs.get('api').replace(/\/$/, '')] : null;
 const apisFor = (chain) => API_OVERRIDE || CHAINS[chain].api;
@@ -339,9 +341,9 @@ const rail = (step, cls) => {
 function chainFromUrl(u) {
   const h = u.hostname, p = u.pathname;
   const tn = /\/testnet4?\//.test(p);
-  if (/mempool\.guide$/.test(h)) return tn ? 'txbt' : 'xbt';
-  if (/kilombino\.com$/.test(h)) return tn ? 'txbt' : 'xbt';
-  return tn ? 'tbtc' : 'btc';
+  if (/mempool\.guide$/.test(h)) return tn ? 'txbt4' : 'xbt';
+  if (/kilombino\.com$/.test(h)) return tn ? 'txbt4' : 'xbt';
+  return tn ? 'tbtc4' : 'btc';
 }
 function parseRef(s) {
   s = s.trim();
@@ -349,14 +351,14 @@ function parseRef(s) {
   if (s.startsWith('{')) { try { return { island: JSON.parse(s) }; } catch { throw new Error('that JSON did not parse'); } }
   let m = s.match(/^(?:txo:)?([a-z0-9]{2,8}):([0-9a-f]{64})(?::(\d+))?$/i);
   if (m) {
-    const chain = m[1].toLowerCase();
+    const chain = canon(m[1].toLowerCase());
     if (!CHAINS[chain]) throw new Error(`unknown chain <code>${esc(chain)}</code>; known: ${Object.keys(CHAINS).join(', ')}`);
     return { chain, txid: m[2].toLowerCase(), vout: Number(m[3] ?? 0) };
   }
   let chain = state.chain;
   if (/^https?:\/\//i.test(s)) { try { chain = chainFromUrl(new URL(s)); } catch {} }
   m = s.match(/([0-9a-f]{64})[/:\s#?&]+(?:vout=|out=|#)?(\d+)/i) || s.match(/([0-9a-f]{64})/i);
-  if (!m) throw new Error('need a txid (64 hex) and an output index, like <code>txo:txbt:txid:0</code>');
+  if (!m) throw new Error('need a txid (64 hex) and an output index, like <code>txo:txbt4:txid:0</code>');
   return { chain, txid: m[1].toLowerCase(), vout: m[2] !== undefined ? Number(m[2]) : 0 };
 }
 
@@ -487,7 +489,7 @@ async function show(ref) {
   const island = ref.island || null;
   if (island) {
     const m = String(island['@id'] || '').match(/^txo:([a-z0-9]+):([0-9a-f]{64}):(\d+)$/i);
-    ref.chain = (island.chain || (m && m[1]) || 'btc').toLowerCase();
+    ref.chain = canon((island.chain || (m && m[1]) || 'btc').toLowerCase());
     ref.txid = (island.txid || (m && m[2]) || '').toLowerCase();
     ref.vout = Number(island.vout ?? (m && m[3]) ?? 0);
   }
@@ -544,7 +546,7 @@ async function show(ref) {
 // Taproot key-path only in this version. XBT/TXBT sign with the unified sighash (0x21) from the
 // blaketest wallet, which a SHA256d node cannot reconstruct, so the spend cannot be replayed there.
 // BTC/TBTC sign a plain BIP341 SIGHASH_DEFAULT. The signer is loaded on first use.
-const unifiedFor = (chain) => chain === 'xbt' || chain === 'txbt';
+const unifiedFor = (chain) => chain === 'xbt' || chain === 'txbt4';
 async function signer() {
   if (T.lib) return T.lib;
   const B = 'https://cdn.jsdelivr.net/gh/bitcoin-blake/blaketest@df14e48/';
